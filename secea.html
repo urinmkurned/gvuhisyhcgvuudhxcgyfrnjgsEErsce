@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heart Landing</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap');
+        body {
+            font-family: 'Fira Code', monospace;
+            background-color: #0b0f19;
+            color: #f43f5e;
+            overflow: hidden;
+            margin: 0;
+        }
+        /* Efekt migającego kursora jak w terminalu */
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            background-color: #f43f5e;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 49% { background-color: #f43f5e; }
+            50%, 100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex items-center justify-center relative select-none">
+
+    <div id="terminal" class="z-10 text-left p-6 max-w-lg w-full bg-[#0d1321] border border-rose-900/30 rounded-lg shadow-2xl transition-opacity duration-1000">
+        <div class="text-sm text-gray-500 mb-4">[system] Initializing heart.PROTOCOL_v2.0...</div>
+        <div id="log" class="text-rose-400 mb-6"></div>
+        
+        <button id="decrypt-btn" class="hidden w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded border border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.5)] transition-all cursor-pointer uppercase tracking-wider text-sm animate-pulse">
+            🔓 Decrypt Message
+        </button>
+        <div id="hint" class="hidden text-center text-xs text-gray-600 mt-2">(or just click anywhere)</div>
+    </div>
+
+    <canvas id="heartCanvas" class="absolute inset-0 opacity-0 transition-opacity duration-1000 pointer-events-none"></canvas>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const logDiv = document.getElementById('log');
+        const decryptBtn = document.getElementById('decrypt-btn');
+        const hint = document.getElementById('hint');
+        const canvas = document.getElementById('heartCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Sekwencja tekstowa w terminalu
+        const lines = [
+            "> Scanning network...",
+            "> One encrypted package found for you.",
+            "> Ready for decryption."
+        ];
+
+        let lineIdx = 0;
+        function typeLog() {
+            if (lineIdx < lines.length) {
+                logDiv.innerHTML += lines[lineIdx] + "<br>";
+                lineIdx++;
+                setTimeout(typeLog, 600);
+            } else {
+                // Pokazanie przycisku po zakończeniu pisania
+                decryptBtn.classList.remove('hidden');
+                hint.classList.remove('hidden');
+            }
+        }
+        setTimeout(typeLog, 500);
+
+        // Uruchomienie efektu serca
+        function startHeartEffect() {
+            terminal.classList.add('opacity-0');
+            setTimeout(() => terminal.remove(), 1000); // Usuń terminal po zaniknięciu
+
+            canvas.classList.remove('opacity-0');
+            resizeCanvas();
+            initHeart();
+            animate();
+        }
+
+        decryptBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            startHeartEffect();
+        });
+        window.addEventListener('click', () => {
+            if (!decryptBtn.classList.contains('hidden')) startHeartEffect();
+        });
+
+        // --- SILNIK CZĄSTECZEK (SERCE 3D) ---
+        let particles = [];
+        const textToDisplay = "love you";
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // Równanie matematyczne serca 3D rzutowane na 2D z rotacją
+        function getHeartPoint(t, scale) {
+            // Klasyczne równanie serca dwuwymiarowego parametr wejściowy t (0 do 2*PI)
+            const x = 16 * Math.pow(Math.sin(t), 3);
+            const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+            return { x: x * scale, y: -y * scale }; // -y ponieważ w canvas oś Y idzie w dół
+        }
+
+        class Particle {
+            constructor(angle, scale, zOffset) {
+                this.angle = angle;
+                this.scale = scale;
+                this.z = zOffset; // Głębokość dla efektu 3D
+                
+                this.basePoint = getHeartPoint(this.angle, this.scale);
+                this.x = window.innerWidth / 2;
+                this.y = window.innerHeight / 2;
+                
+                // Losowa prędkość początkowa (rozbłysk)
+                this.vx = (Math.random() - 0.5) * 10;
+                this.vy = (Math.random() - 0.5) * 10;
+                this.vz = (Math.random() - 0.5) * 2;
+
+                this.fontSize = Math.floor(Math.random() * 6) + 10; // 10px do 15px
+                this.opacity = 0;
+                this.rotationY = Math.random() * Math.PI * 2; 
+            }
+
+            update() {
+                // Obrót wokół osi Y (efekt 3D)
+                this.rotationY += 0.015;
+
+                // Wyliczenie pozycji 3D
+                let x3d = this.basePoint.x * Math.cos(this.rotationY) - this.z * Math.sin(this.rotationY);
+                let z3d = this.basePoint.x * Math.sin(this.rotationY) + this.z * Math.cos(this.rotationY);
+
+                // Perspektywa (proste rzutowanie 3D -> 2D)
+                const fov = 400; 
+                const perspective = fov / (fov + z3d);
+
+                const targetX = (window.innerWidth / 2) + x3d * perspective;
+                const targetY = (window.innerHeight / 2) + this.basePoint.y * perspective;
+
+                // Łagodne dążenie cząsteczek na swoje miejsce w kształcie serca
+                this.x += (targetX - this.x) * 0.05;
+                this.y += (targetY - this.y) * 0.05;
+
+                if (this.opacity < 1) this.opacity += 0.02;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.globalAlpha = this.opacity;
+                ctx.font = `bold ${this.fontSize}px 'Fira Code', monospace`;
+                
+                // Cieniowanie tekstu dla efektu "neonowego" blasku (Glow)
+                ctx.shadowColor = "#f43f5e";
+                ctx.shadowBlur = 8;
+                ctx.fillStyle = `rgba(244, 63, 94, ${this.opacity})`;
+
+                ctx.textAlign = "center";
+                ctx.fillText(textToDisplay, 0, 0);
+                ctx.restore();
+            }
+        }
+
+        function initHeart() {
+            particles = [];
+            const totalParticles = 250; // Liczba napisów tworzących serce
+            
+            for (let i = 0; i < totalParticles; i++) {
+                // Rozłożenie kątów równomiernie od 0 do 2*PI
+                const angle = (i / totalParticles) * Math.PI * 2;
+                // Dodanie lekkiej losowości w skalowaniu, żeby serce było "grubsze" (wielowarstwowe)
+                const scale = 12 + Math.random() * 3;
+                const zOffset = (Math.random() - 0.5) * 80; // Głębokość warstw serca
+                
+                particles.push(new Particle(angle, scale, zOffset));
+            }
+        }
+
+        function animate() {
+            // Lekkie czyszczenie tła z pozostawieniem smugi (motion blur)
+            ctx.fillStyle = 'rgba(11, 15, 25, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+    </script>
+</body>
+</html>
